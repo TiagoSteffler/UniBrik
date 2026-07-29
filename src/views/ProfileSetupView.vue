@@ -1,0 +1,460 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import AppModal from '../components/AppModal.vue'
+import { getBrazilianCities } from '../constants/brazilianCities'
+import { authState, updateAuthenticatedUserProfile } from '../services/authService'
+import { getUserProfile, saveUserProfile } from '../services/marketplaceService'
+import { optimizeMarketplaceImage } from '../utils/imageOptimizer'
+
+const route = useRoute()
+const router = useRouter()
+const user = computed(() => authState.value)
+
+const isEditMode = computed(() => route.name === 'profile-edit')
+const isLoading = ref(false)
+const isSaving = ref(false)
+const error = ref('')
+const showSuccessModal = ref(false)
+const successModalTitle = ref('')
+const successModalMessage = ref('')
+const redirectAfterSave = ref('/profile')
+const hometownOptions = ref([])
+const isLoadingHometownOptions = ref(false)
+
+const form = reactive({
+  fullName: '',
+  gender: '',
+  neighborhood: '',
+  hometown: '',
+  universityRole: '',
+  aboutMe: '',
+  photoURL: '',
+  email: '',
+})
+
+function fillForm() {
+  if (!user.value) {
+    return
+  }
+
+  const profile = getUserProfile(user.value)
+  form.fullName = profile?.fullName || ''
+  form.gender = profile?.gender || ''
+  form.neighborhood = profile?.neighborhood || ''
+  form.hometown = profile?.hometown || ''
+  form.universityRole = profile?.universityRole || ''
+  form.aboutMe = profile?.aboutMe || ''
+  form.photoURL = profile?.photoURL || ''
+  form.email = user.value.email || ''
+}
+
+async function loadHometownOptions() {
+  isLoadingHometownOptions.value = true
+
+  try {
+    const cities = await getBrazilianCities()
+    hometownOptions.value = cities
+
+    const currentValue = String(form.hometown || '').trim()
+    if (currentValue && !cities.includes(currentValue)) {
+      hometownOptions.value = [currentValue, ...cities]
+    }
+  } finally {
+    isLoadingHometownOptions.value = false
+  }
+}
+
+const isBusy = computed(() => isLoading.value || isSaving.value)
+
+async function handlePhotoUpload(event) {
+  const [file] = event.target.files || []
+
+  if (!file) {
+    return
+  }
+
+  error.value = ''
+
+  try {
+    const optimized = await optimizeMarketplaceImage(file)
+    form.photoURL = optimized.previewDataUrl
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Falha ao enviar imagem.'
+  } finally {
+    event.target.value = ''
+  }
+}
+
+function removePhoto() {
+  form.photoURL = ''
+}
+
+function handleUseGooglePhoto() {
+  if (!user.value?.photoURL) {
+    error.value = 'Nenhuma foto disponível no Google.'
+    return
+  }
+  form.photoURL = user.value.photoURL
+}
+
+function handleCancel() {
+  if (isEditMode.value) {
+    router.back()
+  } else {
+    router.replace('/profile')
+  }
+}
+
+function handleProfileSuccessConfirm() {
+  router.replace(redirectAfterSave.value)
+}
+
+async function handleSubmit() {
+  error.value = ''
+
+  if (!user.value) {
+    router.replace('/login')
+    return
+  }
+
+  const fullName = form.fullName.trim()
+  const gender = form.gender.trim()
+  const neighborhood = form.neighborhood.trim()
+  const hometown = form.hometown.trim()
+  const universityRole = form.universityRole.trim()
+
+  if (!fullName || !gender || !neighborhood || !hometown || !universityRole) {
+    error.value =
+      'Preencha nome completo, sexo, bairro, cidade natal e curso/ocupação na universidade para continuar.'
+    return
+  }
+
+  form.aboutMe = form.aboutMe.slice(0, 300)
+
+  isSaving.value = true
+
+  try {
+    const saved = await saveUserProfile(user.value, {
+      fullName,
+      gender,
+      neighborhood,
+      hometown,
+      universityRole,
+      aboutMe: form.aboutMe,
+      photoURL: form.photoURL,
+    })
+
+    updateAuthenticatedUserProfile({
+      displayName: saved.fullName,
+      photoURL: saved.photoURL,
+    })
+
+    redirectAfterSave.value = String(route.query.redirect || '/profile')
+    successModalTitle.value = isEditMode.value ? 'Perfil atualizado' : 'Cadastro concluído'
+    successModalMessage.value = isEditMode.value
+      ? 'Suas alterações de perfil foram salvas com sucesso.'
+      : 'Seu cadastro foi concluído com sucesso. Sua conta está pronta para uso.'
+    showSuccessModal.value = true
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Falha ao salvar cadastro.'
+  } finally {
+    isSaving.value = false
+  }
+}
+
+onMounted(() => {
+  if (!user.value) {
+    router.replace('/login')
+    return
+  }
+
+  isLoading.value = true
+
+  try {
+    fillForm()
+  } finally {
+    isLoading.value = false
+  }
+
+  loadHometownOptions().catch(() => {
+    // O campo de cidade tem fallback local para manter o formulario funcional.
+  })
+})
+</script>
+
+<template>
+  <section class="card loading-section">
+    <div v-if="isBusy" class="section-loading-overlay" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <p v-if="isSaving">Salvando perfil...</p>
+      <p v-else>Carregando perfil...</p>
+    </div>
+
+    <h1>{{ isEditMode ? 'Editar cadastro' : 'Complete seu cadastro' }}</h1>
+    <p class="muted" style="margin-top: 8px">
+      Informe seus dados para liberar as funções de perfil e anúncios.
+      <span v-if="!isEditMode"> Concluir este cadastro é obrigatório para continuar.</span>
+    </p>
+    <p class="required-fields-hint">Campos com <strong class="required-indicator">*</strong> sao obrigatórios.</p>
+
+    <form class="grid profile-form" @submit.prevent="handleSubmit" :aria-busy="isBusy">
+      <label class="field">
+        <span>Nome completo <strong class="required-indicator">*</strong></span>
+        <input
+          v-model="form.fullName"
+          type="text"
+          required
+          maxlength="50"
+          placeholder="Nome completo"
+          autocomplete="name"
+        />
+      </label>
+
+      <label class="field">
+        <span>Sexo <strong class="required-indicator">*</strong></span>
+        <select v-model="form.gender" required>
+          <option disabled value="">Selecione</option>
+          <option value="masc">Masculino</option>
+          <option value="fem">Feminino</option>
+          <option value="outro">Outro</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Bairro de residência para retirada <strong class="required-indicator">*</strong></span>
+        <input
+          v-model="form.neighborhood"
+          type="text"
+          required
+          maxlength="50"
+          placeholder="Ex.: Camobi"
+          autocomplete="address-level3"
+        />
+      </label>
+
+      <label class="field">
+        <span>Cidade natal <strong class="required-indicator">*</strong></span>
+        <input
+          v-model="form.hometown"
+          type="text"
+          required
+          maxlength="50"
+          list="hometown-city-options"
+          :disabled="isLoadingHometownOptions"
+          placeholder="Digite para pesquisar (ex.: Santa Maria - RS)"
+          autocomplete="address-level2"
+        />
+        <datalist id="hometown-city-options">
+          <option v-for="city in hometownOptions" :key="city" :value="city"></option>
+        </datalist>
+        <small class="muted">
+          {{
+            isLoadingHometownOptions
+              ? 'Carregando cidades do Brasil...'
+              : 'Digite para filtrar as opções. Formato sugerido: Cidade - UF.'
+          }}
+        </small>
+      </label>
+
+      <label class="field">
+        <span>Curso/Ocupação na universidade <strong class="required-indicator">*</strong></span>
+        <input
+          v-model="form.universityRole"
+          type="text"
+          required
+          maxlength="50"
+          placeholder="Ex.: Engenharia de Software"
+          autocomplete="organization-title"
+        />
+      </label>
+
+      <label class="field">
+        <span>Sobre mim</span>
+        <textarea
+          v-model="form.aboutMe"
+          rows="4"
+          maxlength="300"
+          placeholder="Conte um pouco sobre você"
+        ></textarea>
+        <small class="muted">{{ form.aboutMe.length }}/300</small>
+      </label>
+
+      <label class="field">
+        <span>Email Google</span>
+        <input v-model="form.email" type="email" readonly disabled />
+      </label>
+
+      <div class="field">
+        <span>Foto de perfil</span>
+
+        <div class="profile-photo-section">
+          <div class="photo-preview-container">
+            <div v-if="form.photoURL" class="photo-preview-wrap">
+              <img :src="form.photoURL" alt="Foto de perfil" class="photo-preview" />
+            </div>
+            <div v-else class="photo-preview-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </div>
+          </div>
+
+          <div class="photo-button-actions">
+            <button type="button" class="btn secondary" @click="handleUseGooglePhoto">
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-upload-icon lucide-cloud-upload"><path d="M12 13v8"/><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m8 17 4-4 4 4"/></svg>
+              Usar foto Google
+            </button>
+            <label class="btn secondary" style="cursor: pointer; margin: 0;">
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-open-dot-icon lucide-folder-open-dot"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/><circle cx="14" cy="15" r="1"/></svg>
+              Escolher foto
+              <input
+                type="file"
+                accept="image/*"
+                @change="handlePhotoUpload"
+                style="display: none;"
+              />
+            </label>
+            <button
+              v-if="form.photoURL"
+              type="button"
+              class="btn secondary"
+              @click="removePhoto"
+            >
+              <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Remover foto
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button v-if="isEditMode" type="button" class="btn secondary" @click="handleCancel">
+          <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-x-icon lucide-circle-x"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+          Cancelar
+        </button>
+        <button class="btn" type="submit" :disabled="isSaving">
+          <svg style="width: 16px; height: 16px" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save-icon lucide-save"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+          {{ isSaving ? 'Salvando...' : isEditMode ? 'Salvar alterações' : 'Concluir cadastro' }}
+        </button>
+      </div>
+    </form>
+
+    <p v-if="error" style="color: #b91c1c; margin-top: 10px">{{ error }}</p>
+
+    <AppModal
+      v-model="showSuccessModal"
+      variant="info"
+      :title="successModalTitle"
+      :message="successModalMessage"
+      :details="['Você será redirecionado para a próxima etapa ao confirmar.']"
+      confirm-text="Continuar"
+      :show-cancel="false"
+      @confirm="handleProfileSuccessConfirm"
+    />
+  </section>
+</template>
+
+<style scoped>
+h1 {
+  margin: 0;
+}
+
+.profile-form {
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field > span {
+  font-size: 14px;
+  color: #334155;
+}
+
+.profile-photo-section {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 24px;
+  align-items: center;
+}
+
+.photo-preview-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  width: 100%;
+}
+
+.photo-preview-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.photo-preview {
+  height: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e2e8f0;
+}
+
+.photo-preview-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.photo-preview-empty svg {
+  width: 60px;
+  height: 60px;
+}
+
+.photo-button-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.photo-button-actions .btn {
+  width: 100%;
+}
+
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.form-actions .btn {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .profile-photo-section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .photo-preview-container {
+    height: 150px;
+  }
+
+  .form-actions {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
