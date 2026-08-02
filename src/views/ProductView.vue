@@ -549,7 +549,7 @@ watch(
         <p><strong>Estado:</strong> {{ product.condition === 'novo' ? 'Novo' : 'Usado' }}</p>
         <p><strong>Categoria:</strong> {{ product.category }}</p>
         <p><strong>Descrição:</strong> </p>
-        <p>{{ product.description }}</p>
+        <p style="white-space: pre-line;">{{ product.description }}</p>
         <p><strong>Localizacao:</strong> {{ productLocation }}</p>
         <p v-if="deliveryMethods.length"><strong>{{ deliveryMethods.join(' | ') }}</strong> </p>
       </div>

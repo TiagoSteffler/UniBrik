@@ -682,14 +682,17 @@ watch(
         </div>
 
         <form class="chat-composer-form" @submit.prevent="sendMessage">
-          <textarea
-            v-model="draftMessage"
-            rows="2"
-            maxlength="300"
-            placeholder="Digite sua mensagem"
-            :disabled="isReadOnlyConversation || isSending"
-            @keydown="handleKeydown"
-          ></textarea>
+          <div style="display: flex; flex-direction: column; width: 100%;">
+            <textarea
+              v-model="draftMessage"
+              rows="2"
+              maxlength="300"
+              placeholder="Digite sua mensagem"
+              :disabled="isReadOnlyConversation || isSending"
+              @keydown="handleKeydown"
+            ></textarea>
+            <small class="muted" style="text-align: right; margin-top: 4px;">{{ draftMessage.length }}/300</small>
+          </div>
           <button class="btn btn-icon" type="submit" :disabled="isReadOnlyConversation || isSending || (!draftMessage.trim() && !pendingAttachment)" title="Enviar" style="height: 52px; width: 52px; padding: 0; display: flex; align-items: center; justify-content: center;">
             <svg v-if="!isSending" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"></line>

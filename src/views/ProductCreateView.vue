@@ -246,6 +246,7 @@ async function submitProduct() {
         <label class="field">
           <span>Título do anúncio</span>
           <input v-model="form.title" type="text" required maxlength="50" placeholder="Ex.: Notebook Acer" />
+          <small class="muted" style="text-align: right;">{{ form.title.length }}/50</small>
         </label>
 
         <label class="field">
@@ -257,6 +258,7 @@ async function submitProduct() {
             required
             placeholder="Descreva estado, itens inclusos e detalhes relevantes"
           ></textarea>
+          <small class="muted" style="text-align: right;">{{ form.description.length }}/1000</small>
         </label>
 
         <label class="field">

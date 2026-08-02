@@ -267,6 +267,7 @@ onMounted(() => {
           placeholder="Ex.: Engenharia de Software"
           autocomplete="organization-title"
         />
+        <small class="muted" style="text-align: right;">{{ form.universityRole.length }}/50</small>
       </label>
 
       <label class="field">
@@ -277,7 +278,7 @@ onMounted(() => {
           maxlength="300"
           placeholder="Conte um pouco sobre você"
         ></textarea>
-        <small class="muted">{{ form.aboutMe.length }}/300</small>
+        <small class="muted" style="text-align: right;">{{ form.aboutMe.length }}/300</small>
       </label>
 
       <label class="field">
