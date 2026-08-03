@@ -577,7 +577,7 @@ function normalizeProduct(product) {
     sellerId: product.sellerId || '',
     sellerName: product.sellerName || 'Vendedor',
     sellerPhotoURL: product.sellerPhotoURL || '',
-    createdAt: product.createdAt || new Date().toISOString().slice(0, 10),
+    createdAt: product.createdAt || new Date().toISOString(),
     price: Number(product.price || 0),
     condition: product.condition || 'usado',
     deliveryOptions: product.deliveryOptions || { delivery: false, retrieval: true },
@@ -904,11 +904,13 @@ async function getAllProductsFirestore(options = {}) {
     return getAllProducts()
   }
 
+  const cacheKey = adminMode ? `${PRODUCTS_COLLECTION}_admin` : PRODUCTS_COLLECTION
+
   // Se não houver filtro, tentamos o cache primeiro para a coleção global.
   // ownerModeUid não usa o cache global pois os resultados seriam parciais.
   if (!ownerModeUid) {
-    const cached = getCachedCollection(PRODUCTS_COLLECTION)
-    const localTimestamp = getCacheTimestamp(PRODUCTS_COLLECTION)
+    const cached = getCachedCollection(cacheKey)
+    const localTimestamp = getCacheTimestamp(cacheKey)
     const remoteTimestamp = await getRemoteCacheTimestamp()
 
     if (remoteTimestamp && localTimestamp) {
@@ -942,15 +944,15 @@ async function getAllProductsFirestore(options = {}) {
 
   // Só populamos o cache global se não for uma query restrita a owner
   if (!ownerModeUid) {
-    setCachedCollection(PRODUCTS_COLLECTION, products)
+    setCachedCollection(cacheKey, products)
     products.forEach(p => setCachedProduct(p.id, p))
 
     const remoteTimestamp = await getRemoteCacheTimestamp()
     if (remoteTimestamp) {
-      setCacheTimestamp(PRODUCTS_COLLECTION, remoteTimestamp)
+      setCacheTimestamp(cacheKey, remoteTimestamp)
     } else {
       await updateRemoteCacheTimestamp()
-      setCacheTimestamp(PRODUCTS_COLLECTION, new Date().toISOString())
+      setCacheTimestamp(cacheKey, new Date().toISOString())
     }
   }
 
@@ -1043,7 +1045,7 @@ async function getSellerPreviewById(sellerId) {
     photoURL: sellerProfile.photoURL || sample.sellerPhotoURL || '',
     city: sellerProfile.hometown || 'Não informado',
     joinedAt:
-      sellerProfile.createdAt || sample.createdAt || new Date().toISOString().slice(0, 10),
+      sellerProfile.createdAt || sample.createdAt || new Date().toISOString(),
     about: sellerProfile.aboutMe || 'Não Disponível',
   }
 }
@@ -1134,7 +1136,7 @@ function getPreferredUserIdentity(user) {
 }
 
 function toSellerSummary(sellerId, profile, fallback = {}) {
-  const now = new Date().toISOString().slice(0, 10)
+  const now = new Date().toISOString()
 
   return {
     id: sellerId,
@@ -1150,7 +1152,7 @@ function toSellerSummary(sellerId, profile, fallback = {}) {
 }
 
 function toMyProfileData(user, normalizedProfile) {
-  const now = new Date().toISOString().slice(0, 10)
+  const now = new Date().toISOString()
 
   return {
     id: user.uid,
@@ -1217,7 +1219,7 @@ function cacheNormalizedUserProfile(userId, profile) {
 
 function normalizeUserProfile(profile, user) {
   const email = String(profile?.email || user?.email || '').trim()
-  const now = new Date().toISOString().slice(0, 10)
+  const now = new Date().toISOString()
 
   return {
     fullName: String(profile?.fullName || getSuggestedName(user)).trim(),
@@ -1591,7 +1593,7 @@ export async function getSellerById(sellerId) {
     return {
       ...seeded,
       city: seeded.city || 'Não informado',
-      joinedAt: seeded.joinedAt || new Date().toISOString().slice(0, 10),
+      joinedAt: seeded.joinedAt || new Date().toISOString(),
       about: seeded.about || 'Não Disponível',
     }
   }
@@ -1708,7 +1710,7 @@ export async function createProduct(payload, user) {
       sellerId: user.uid,
       sellerName: sellerIdentity.displayName,
       sellerPhotoURL: sellerPhotoForDocuments,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
       moderationStatus,
       moderationReason: '',
       moderationUpdatedAt: new Date().toISOString(),
@@ -1770,7 +1772,7 @@ export async function createProduct(payload, user) {
     sellerId: user.uid,
     sellerName: sellerIdentity.displayName,
     sellerPhotoURL: sellerIdentity.photoURL,
-    createdAt: new Date().toISOString().slice(0, 10),
+    createdAt: new Date().toISOString(),
     moderationStatus,
     moderationReason: '',
     moderationUpdatedAt: new Date().toISOString(),

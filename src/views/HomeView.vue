@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import ProductCard from '../components/ProductCard.vue'
 import { authState } from '../services/authService'
 import { getFreeProducts, getHomeMessage, getRecentProducts } from '../services/marketplaceService'
@@ -20,8 +20,8 @@ async function loadSections() {
   isLoading.value = true
 
   try {
-    freeProducts.value = await getFreeProducts(8, { viewer: currentUser.value })
-    recentProducts.value = await getRecentProducts(8, { viewer: currentUser.value })
+    freeProducts.value = await getFreeProducts(12, { viewer: currentUser.value })
+    recentProducts.value = await getRecentProducts(12, { viewer: currentUser.value })
     homeMessage.value = await getHomeMessage()
     isMessageDismissed.value = false
   } finally {
@@ -29,8 +29,31 @@ async function loadSections() {
   }
 }
 
+const maxVisibleProducts = ref(3)
+
+function updateMaxVisible() {
+  if (typeof window === 'undefined') return
+  const isMobile = window.innerWidth <= 640
+  if (isMobile) {
+    maxVisibleProducts.value = 3
+  } else {
+    // 32px padding/margin on app-shell
+    const containerWidth = Math.min(window.innerWidth - 32, 1550)
+    const gap = 10
+    const minWidth = 240
+    const columns = Math.floor((containerWidth + gap) / (minWidth + gap))
+    maxVisibleProducts.value = Math.max(1, columns)
+  }
+}
+
 onMounted(() => {
+  updateMaxVisible()
+  window.addEventListener('resize', updateMaxVisible)
   loadSections()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMaxVisible)
 })
 
 watch(currentUser, () => {
@@ -67,9 +90,9 @@ watch(currentUser, () => {
         </div>
 
         <section class="grid products" v-if="freeProducts.length">
-          <ProductCard v-for="product in freeProducts.slice(0, 3)" :key="product.id" :product="product" />
+          <ProductCard v-for="product in freeProducts.slice(0, maxVisibleProducts)" :key="product.id" :product="product" />
         </section>
-        <div v-if="freeProducts.length > 3" style="text-align: center; margin-top: 16px;">
+        <div v-if="freeProducts.length > maxVisibleProducts" style="text-align: center; margin-top: 16px;">
           <RouterLink to="/search?maxPrice=0" class="btn secondary" style="min-width: 120px;">Mais</RouterLink>
         </div>
         <p v-else-if="freeProducts.length === 0" class="card muted">Nenhum anúncio gratuito no momento.</p>
@@ -85,9 +108,9 @@ watch(currentUser, () => {
         </div>
 
         <section class="grid products" v-if="recentProducts.length">
-          <ProductCard v-for="product in recentProducts.slice(0, 3)" :key="product.id" :product="product" />
+          <ProductCard v-for="product in recentProducts.slice(0, maxVisibleProducts)" :key="product.id" :product="product" />
         </section>
-        <div v-if="recentProducts.length > 3" style="text-align: center; margin-top: 16px;">
+        <div v-if="recentProducts.length > maxVisibleProducts" style="text-align: center; margin-top: 16px;">
           <RouterLink to="/search" class="btn secondary" style="min-width: 120px;">Mais</RouterLink>
         </div>
         <p v-else-if="recentProducts.length === 0" class="card muted">Nenhum anúncio recente encontrado.</p>
